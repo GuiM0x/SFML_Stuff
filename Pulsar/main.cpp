@@ -98,9 +98,13 @@ int main()
     //// RESSOURCES
     const float sprayer_radius{30.f};
     sf::CircleShape sprayer{sprayer_radius, 30};
-    sprayer.setFillColor(sf::Color::Blue);
     sprayer.setPosition((WIDTH_SCREEN / 2.f) - sprayer.getRadius(),
                         (HEIGHT_SCREEN / 2.f) - sprayer.getRadius());
+    sf::Texture sprayer_texture{};
+    sprayer_texture.loadFromFile("assets/sprayer.png");
+    sf::Sprite sprayer_sprite(sprayer_texture);
+    sprayer_sprite.setOrigin(sprayer_radius, sprayer_radius);
+    sprayer_sprite.setPosition(sprayer.getPosition() + sf::Vector2f{sprayer_radius, sprayer_radius});
     const unsigned max_particle{1000};
     const sf::Vector2f sprayer_center{sprayer.getPosition().x + sprayer.getRadius(),
                                       sprayer.getPosition().y + sprayer.getRadius()};
@@ -164,6 +168,8 @@ int main()
             const float rotation{rotation_speed_sprayer * dt.asSeconds()};
             updatePole(north_pole, north_angle, rotation, sprayer_radius, sprayer_center);
             updatePole(south_pole, south_angle, rotation, sprayer_radius, sprayer_center);
+            sprayer_sprite.setRotation(north_angle);
+
         }
         for(unsigned i = 0; i < max_particle; ++i){
             north_particle[i].position = moveParticle(north_speed[i] * dt.asSeconds(),
@@ -193,7 +199,7 @@ int main()
 
         //// DRAW
         window.clear();
-        window.draw(sprayer);
+        window.draw(sprayer_sprite);
         window.draw(north_particle);
         window.draw(south_particle);
         for(const auto& aura : north_aura){
