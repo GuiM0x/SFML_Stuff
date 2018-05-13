@@ -3,8 +3,6 @@
 #include <random>
 #include <SFML/Graphics.hpp>
 
-namespace gx{
-
 int rollTheDice(int valmin, int valmax);
 int rollTheDice(int valmin, int valmax)
 {
@@ -12,8 +10,6 @@ int rollTheDice(int valmin, int valmax)
     std::uniform_int_distribution<> dist{valmin, valmax};
 
     return dist(generator);
-}
-
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -28,8 +24,8 @@ int main()
     const std::size_t max_points{1000};
     sf::VertexArray particle{sf::Points, max_points};
     for(unsigned int i=0; i<max_points; ++i){
-        float x{static_cast<float>(gx::rollTheDice(0, 1280))};
-        float y{static_cast<float>(gx::rollTheDice(0, 720))};
+        float x{static_cast<float>(rollTheDice(0, 1280))};
+        float y{static_cast<float>(rollTheDice(0, 720))};
         particle[i].position = sf::Vector2f(x, y);
         particle[i].color = sf::Color::Cyan;
     }
@@ -37,8 +33,8 @@ int main()
     std::vector<sf::Vector2f> all_speeds{};
     for(unsigned int i=0; i<max_points; ++i){
         all_speeds.push_back(sf::Vector2f(
-            static_cast<float>(gx::rollTheDice(50, 100)),
-            static_cast<float>(gx::rollTheDice(50, 200))
+            static_cast<float>(rollTheDice(50, 100)),
+            static_cast<float>(rollTheDice(50, 200))
         ));
     }
 
@@ -65,11 +61,11 @@ int main()
             particle[i].position.y += all_speeds[i].y * dt.asSeconds();
             if(particle[i].position.x > 1280.f){
                 particle[i].position.x = 0.f;
-                all_speeds[i].x = static_cast<float>(gx::rollTheDice(50, 100));
+                all_speeds[i].x = static_cast<float>(rollTheDice(50, 100));
             }
             if(particle[i].position.y > 720.f){
                 particle[i].position.y = 0.f;
-                all_speeds[i].y = static_cast<float>(gx::rollTheDice(50, 200));
+                all_speeds[i].y = static_cast<float>(rollTheDice(50, 200));
             }
         }
 
