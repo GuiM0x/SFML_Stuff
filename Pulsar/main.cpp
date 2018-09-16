@@ -110,6 +110,7 @@ int main()
                                       sprayer.getPosition().y + sprayer.getRadius()};
     float north_angle{270.f};
     float south_angle{90.f};
+    sprayer_sprite.setRotation(north_angle);
     sf::Vector2f north_pole{getCirclePointFromAngle(north_angle, sprayer.getRadius(), sprayer_center)};
     sf::Vector2f south_pole{getCirclePointFromAngle(south_angle, sprayer.getRadius(), sprayer_center)};
     sf::VertexArray north_particle{sf::Points, max_particle};
