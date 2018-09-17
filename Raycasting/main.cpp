@@ -27,9 +27,6 @@ sf::Vector2f setEndPoint(const sf::Vector2f& origin, float angle, float factor)
 /////////////////////////////////// GET INTERSECT FACTOR
 float getIntersectFactor(const sf::VertexArray& ray, float ray_angle, const sf::VertexArray& segment)
 {
-    float k1{}; // Factor to find
-    float k2{}; // Factor determined and used to find k1
-
     const float r_px{ray[0].position.x};
     const float r_py{ray[0].position.y};
     const float r_dx = cos(degToRad(ray_angle));
@@ -39,6 +36,9 @@ float getIntersectFactor(const sf::VertexArray& ray, float ray_angle, const sf::
     const float s_py{segment[0].position.y};
     const float s_dx{segment[1].position.x - segment[0].position.x};
     const float s_dy{segment[1].position.y - segment[0].position.y};
+
+    float k1{}; // Factor to find
+    float k2{}; // Factor determined and used to find k1
 
     k2 = ((r_dx*(s_py-r_py)) + (r_dy*(r_px-s_px)))/((s_dx*r_dy) - (s_dy*r_dx));
     k1 = (s_px+(s_dx*k2)-r_px)/r_dx;
@@ -98,18 +98,21 @@ void moveRaysOrigins(std::vector<sf::VertexArray>& rays, const sf::Vector2f& new
 /////////////////////////////////// MAIN
 int main()
 {
+    sf::ContextSettings settings{};
+    settings.antialiasingLevel = 8;
+
     // WINDOW
     const unsigned WINDOW_WIDTH{800};
     const unsigned WINDOW_HEIGHT{600};
     const sf::Vector2f SCREEN_CENTER{WINDOW_WIDTH/2.f, WINDOW_HEIGHT/2.f};
-    sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "Brouillon_SFML");
+    sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "Brouillon_SFML", sf::Style::Default, settings);
 
     // TIMER
     sf::Clock clock{};
     sf::Time dt{};
 
     // A RAY
-    const unsigned MAX_RAYS{32};
+    const unsigned MAX_RAYS{64};
     std::vector<sf::VertexArray> rays{};
     for(unsigned i=0; i<MAX_RAYS; ++i){
         sf::VertexArray ray{sf::LineStrip, 2};
@@ -119,13 +122,27 @@ int main()
     }
 
     // BOXES
-    sf::RectangleShape box_1 = createBox(100.f, 100.f, 150.f, 350.f);
-    sf::RectangleShape box_2 = createBox(500.f, 100.f, 150.f, 350.f);
+    sf::RectangleShape box_window = createBox(0.f, 0.f, WINDOW_WIDTH, WINDOW_HEIGHT);
+    sf::RectangleShape box_1 = createBox(50.f, 50.f, 150.f, 150.f);
+    sf::RectangleShape box_2 = createBox(600.f, 50.f, 150.f, 150.f);
+    sf::RectangleShape box_3 = createBox(600.f, 400.f, 150.f, 150.f);
+    sf::RectangleShape box_4 = createBox(50.f, 400.f, 150.f, 150.f);
+    sf::RectangleShape box_5 = createBox((WINDOW_WIDTH/2.f)-75.f, (WINDOW_HEIGHT/2.f)-75.f, 150.f, 150.f);
+
 
     // SEGMENTS
     std::vector<sf::VertexArray> stocked_segments{};
+    getSegmentsFromBox(box_window, stocked_segments);
     getSegmentsFromBox(box_1, stocked_segments);
     getSegmentsFromBox(box_2, stocked_segments);
+    getSegmentsFromBox(box_3, stocked_segments);
+    getSegmentsFromBox(box_4, stocked_segments);
+    getSegmentsFromBox(box_5, stocked_segments);
+
+    // ENDPOINT (ONLY VISUAL)
+    sf::CircleShape red_point{6.f};
+    red_point.setFillColor(sf::Color::Green);
+    std::vector<sf::CircleShape> visu_endpoint(MAX_RAYS, red_point);
 
     // LOOP
     while(window.isOpen())
@@ -158,10 +175,11 @@ int main()
                     factors.push_back(factor);
             }
             std::sort(factors.begin(), factors.end());
-            if(!factors.empty())
+            if(!factors.empty()){
                 ray[1].position = setEndPoint(ray[0].position, angle, factors[0]);
-            else
-                ray[1].position = setEndPoint(ray[0].position, angle, 1000.f);
+                visu_endpoint[ray_number].setPosition(ray[1].position.x - red_point.getRadius(),
+                                                      ray[1].position.y - red_point.getRadius());
+            }
             ++ray_number;
             angle = (359.f/MAX_RAYS)*ray_number;
         }
@@ -172,11 +190,14 @@ int main()
 
         // DRAW
         window.clear();
-        for(const auto& ray : rays){
-            window.draw(ray);
-        }
+        for(const auto& ray : rays) window.draw(ray);
+        for(const auto& red_p : visu_endpoint) window.draw(red_p);
+        window.draw(box_window);
         window.draw(box_1);
         window.draw(box_2);
+        window.draw(box_3);
+        window.draw(box_4);
+        window.draw(box_5);
         window.display();
     }
 
