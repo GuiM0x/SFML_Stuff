@@ -1,36 +1,68 @@
+#include <SFML/Graphics.hpp>
 #include <iostream>
 #include <cmath>
 #include <algorithm>
-#include <SFML/Graphics.hpp>
+#include <cassert>
 
-const float PI{3.141592};
+const float PI{3.14159265};
 
-/////////////////////////////////// RAD TO DEG
-float radToDeg(float angle_deg)
+/////////////////////////////////// RAY
+class Ray : public sf::Drawable
 {
-    return float{(angle_deg * 180.f)/PI};
-}
+public:
+    Ray(const sf::Vector2f& edgePoint) :
+        m_edge_point{edgePoint} {}
 
-/////////////////////////////////// DEG TO RAD
-float degToRad(float angle_rad)
-{
-    return float{(angle_rad * PI)/180.f};
-}
+    void updateOrigin(const sf::Vector2f& new_origin){
+        m_vertices[0].position = new_origin;
+        updateAngleFromEdge();
+    }
 
-/////////////////////////////////// CREATE ENDPOINT
-sf::Vector2f setEndPoint(const sf::Vector2f& origin, float angle, float factor)
-{
-    return sf::Vector2f{origin.x + static_cast<float>(cos(degToRad(angle)))*factor,
-                        origin.y + static_cast<float>(sin(degToRad(angle)))*factor};
-}
+    void updateEndPoint(float factor){
+        m_vertices[1].position = sf::Vector2f{m_vertices[0].position.x + static_cast<float>(cos(m_angle))*factor,
+                                              m_vertices[0].position.y + static_cast<float>(sin(m_angle))*factor};
+    }
+
+    sf::Vector2f origin() const{
+        return m_vertices[0].position;
+    }
+
+    sf::Vector2f endpoint() const{
+        return m_vertices[1].position;
+    }
+
+    void setOffsetAngle(float offset){
+        m_offset_angle = offset;
+    }
+
+    float angle() const{
+        return m_angle;
+    }
+
+private:
+    void updateAngleFromEdge(){
+        const float dx = m_edge_point.x - m_vertices[0].position.x;
+        const float dy = m_edge_point.y - m_vertices[0].position.y;
+        m_angle = atan2(dy, dx) + m_offset_angle;
+    }
+
+    void draw(sf::RenderTarget& target, sf::RenderStates states) const{
+        target.draw(m_vertices, states);
+    }
+
+    sf::VertexArray m_vertices{sf::LineStrip, 2};
+    float m_angle{}; // radians
+    const sf::Vector2f m_edge_point{};
+    float m_offset_angle{0.f};
+};
 
 /////////////////////////////////// GET INTERSECT FACTOR
-float getIntersectFactor(const sf::VertexArray& ray, float ray_angle, const sf::VertexArray& segment)
+float getIntersectFactor(const Ray& ray, const sf::VertexArray& segment)
 {
-    const float r_px{ray[0].position.x};
-    const float r_py{ray[0].position.y};
-    const float r_dx = cos(degToRad(ray_angle));
-    const float r_dy = sin(degToRad(ray_angle));
+    const float r_px{ray.origin().x};
+    const float r_py{ray.origin().y};
+    const float r_dx = cos(ray.angle());
+    const float r_dy = sin(ray.angle());
 
     const float s_px{segment[0].position.x};
     const float s_py{segment[0].position.y};
@@ -43,7 +75,7 @@ float getIntersectFactor(const sf::VertexArray& ray, float ray_angle, const sf::
     k2 = ((r_dx*(s_py-r_py)) + (r_dy*(r_px-s_px)))/((s_dx*r_dy) - (s_dy*r_dx));
     k1 = (s_px+(s_dx*k2)-r_px)/r_dx;
 
-    if(k1 > 0 && k2 > 0 && k2 < 1)
+    if(k1 >= 0 && k2 >= 0 && k2 <= 1)
         return k1;
 
     return float{-1.f};
@@ -87,11 +119,30 @@ void getSegmentsFromBox(const sf::RectangleShape& box, std::vector<sf::VertexArr
     stocked_segments.push_back(m_line_AD);
 }
 
+/////////////////////////////////// GET EDGEPOINTS FROM BOX
+void createRays(std::vector<Ray>& rays, const sf::RectangleShape& box)
+{
+    const sf::Vector2f position = box.getPosition();
+    const sf::Vector2f size = box.getSize();
+    const std::array<sf::Vector2f, 4> edgePoints{sf::Vector2f{position},
+                                                 sf::Vector2f{position.x+size.x, position.y},
+                                                 sf::Vector2f{position.x+size.x, position.y+size.y},
+                                                 sf::Vector2f{position.x, position.y+size.y}};
+    for(const auto& ep : edgePoints){
+        Ray r{ep};
+        rays.push_back(r);
+        rays.push_back(r);
+        rays.back().setOffsetAngle(-0.00001f);
+        rays.push_back(r);
+        rays.back().setOffsetAngle(+0.00001f);
+    }
+}
+
 /////////////////////////////////// MOVE RAYS ORIGINS
-void moveRaysOrigins(std::vector<sf::VertexArray>& rays, const sf::Vector2f& new_origin)
+void moveRaysOrigin(std::vector<Ray>& rays, const sf::Vector2f& new_origin)
 {
     for(auto&& ray : rays){
-        ray[0].position = new_origin;
+        ray.updateOrigin(new_origin);
     }
 }
 
@@ -99,7 +150,7 @@ void moveRaysOrigins(std::vector<sf::VertexArray>& rays, const sf::Vector2f& new
 int main()
 {
     sf::ContextSettings settings{};
-    settings.antialiasingLevel = 8;
+    settings.antialiasingLevel = 0;
 
     // WINDOW
     const unsigned WINDOW_WIDTH{800};
@@ -111,16 +162,6 @@ int main()
     sf::Clock clock{};
     sf::Time dt{};
 
-    // A RAY
-    const unsigned MAX_RAYS{64};
-    std::vector<sf::VertexArray> rays{};
-    for(unsigned i=0; i<MAX_RAYS; ++i){
-        sf::VertexArray ray{sf::LineStrip, 2};
-        ray[0].position = SCREEN_CENTER;
-        ray[1].position = setEndPoint(SCREEN_CENTER, (359.f/MAX_RAYS)*i, 1.f);
-        rays.push_back(ray);
-    }
-
     // BOXES
     sf::RectangleShape box_window = createBox(0.f, 0.f, WINDOW_WIDTH, WINDOW_HEIGHT);
     sf::RectangleShape box_1 = createBox(50.f, 50.f, 150.f, 150.f);
@@ -128,7 +169,6 @@ int main()
     sf::RectangleShape box_3 = createBox(600.f, 400.f, 150.f, 150.f);
     sf::RectangleShape box_4 = createBox(50.f, 400.f, 150.f, 150.f);
     sf::RectangleShape box_5 = createBox((WINDOW_WIDTH/2.f)-75.f, (WINDOW_HEIGHT/2.f)-75.f, 150.f, 150.f);
-
 
     // SEGMENTS
     std::vector<sf::VertexArray> stocked_segments{};
@@ -139,10 +179,19 @@ int main()
     getSegmentsFromBox(box_4, stocked_segments);
     getSegmentsFromBox(box_5, stocked_segments);
 
+    // RAYS
+    std::vector<Ray> rays{};
+    createRays(rays, box_window);
+    createRays(rays, box_1);
+    createRays(rays, box_2);
+    createRays(rays, box_3);
+    createRays(rays, box_4);
+    createRays(rays, box_5);
+
     // ENDPOINT (ONLY VISUAL)
     sf::CircleShape red_point{6.f};
     red_point.setFillColor(sf::Color::Green);
-    std::vector<sf::CircleShape> visu_endpoint(MAX_RAYS, red_point);
+    std::vector<sf::CircleShape> visu_endpoint(rays.size(), red_point);
 
     // LOOP
     while(window.isOpen())
@@ -165,28 +214,27 @@ int main()
         // UPDATE
         dt = clock.restart();
 
-        float angle{0.f};
+        const sf::Vector2f mouse_pos{static_cast<float>(sf::Mouse::getPosition(window).x),
+                                     static_cast<float>(sf::Mouse::getPosition(window).y)};
+        moveRaysOrigin(rays, mouse_pos);
+
         unsigned ray_number{0};
         for(auto&& ray : rays){
             std::vector<float> factors{};
             for(const auto& seg : stocked_segments){
-                float factor{getIntersectFactor(ray, angle, seg)};
+                float factor{getIntersectFactor(ray, seg)};
                 if(factor > 0.f)
                     factors.push_back(factor);
             }
-            std::sort(factors.begin(), factors.end());
+            //assert(!factors.empty() && "factors can't be empty");
             if(!factors.empty()){
-                ray[1].position = setEndPoint(ray[0].position, angle, factors[0]);
-                visu_endpoint[ray_number].setPosition(ray[1].position.x - red_point.getRadius(),
-                                                      ray[1].position.y - red_point.getRadius());
+                std::sort(factors.begin(), factors.end());
+                ray.updateEndPoint(factors[0]);
             }
-            ++ray_number;
-            angle = (359.f/MAX_RAYS)*ray_number;
+            visu_endpoint[ray_number].setPosition(ray.endpoint().x - red_point.getRadius(),
+                                                  ray.endpoint().y - red_point.getRadius());
+            ++ray_number; // Only used for enpoint visu
         }
-
-        const sf::Vector2f mouse_pos{static_cast<float>(sf::Mouse::getPosition(window).x),
-                                     static_cast<float>(sf::Mouse::getPosition(window).y)};
-        moveRaysOrigins(rays, mouse_pos);
 
         // DRAW
         window.clear();
@@ -203,3 +251,96 @@ int main()
 
     return 0;
 }
+
+/*
+#include <SFML/Graphics.hpp>
+#include <iostream>
+#include <cmath>
+
+const float PI{3.141592};
+
+float radToDeg(float angle_deg)
+{
+    return float{(angle_deg * 180.f)/PI};
+}
+
+float degToRad(float angle_rad)
+{
+    return float{(angle_rad * PI)/180.f};
+}
+
+void initEndPoint(const sf::Vector2f& edgePoint, const sf::Vector2f& origin, sf::Vertex& endPoint)
+{
+    float dx = edgePoint.x - origin.x;
+    float dy = edgePoint.y - origin.y;
+    float radius = static_cast<float>(sqrt(pow(dx,2) + pow(dy,2)));
+
+    float angle_deg = radToDeg(atan2(dy, dx));
+
+    std::cout << angle_deg << '\n';
+
+    endPoint.position.x = origin.x + (radius * cos(degToRad(angle_deg)));
+    endPoint.position.y = origin.y + (radius * sin(degToRad(angle_deg)));
+}
+
+int main()
+{
+    sf::ContextSettings settings{};
+    settings.antialiasingLevel = 0;
+
+    // WINDOW
+    const unsigned WINDOW_WIDTH{800};
+    const unsigned WINDOW_HEIGHT{600};
+    const sf::Vector2f SCREEN_CENTER{WINDOW_WIDTH/2.f, WINDOW_HEIGHT/2.f};
+    sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "Brouillon_SFML", sf::Style::Default, settings);
+
+    sf::Vector2f random_point{450.f, 50.f};
+    sf::CircleShape random_point_visu{6};
+    random_point_visu.setPosition(random_point.x-6, random_point.y-6);
+
+    sf::VertexArray line{sf::LineStrip, 2};
+    line[0].position = SCREEN_CENTER;
+    //line[1].position = random_point;
+
+    // TIMER
+    sf::Clock clock{};
+    sf::Time dt{};
+
+    // LOOP
+    while(window.isOpen())
+    {
+        sf::Event event{};
+
+        while(window.pollEvent(event))
+        {
+            if(event.type == sf::Event::KeyPressed){
+                if(event.key.code == sf::Keyboard::Escape){
+                    window.close();
+                }
+            }
+
+            if(event.type == sf::Event::MouseButtonPressed){
+                if(event.mouseButton.button == sf::Mouse::Left){
+                    line[0].position = static_cast<sf::Vector2f>(sf::Mouse::getPosition(window));
+                }
+            }
+
+            if(event.type == sf::Event::Closed){
+                window.close();
+            }
+        }
+
+        // UPDATE
+        dt = clock.restart();
+
+        initEndPoint(random_point, line[0].position, line[1]);
+
+        // DRAW
+        window.clear();
+        window.draw(line);
+        window.draw(random_point_visu);
+        window.display();
+    }
+
+    return 0;
+}*/
