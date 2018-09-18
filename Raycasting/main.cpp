@@ -10,31 +10,28 @@ const float PI{3.14159265};
 class Ray : public sf::Drawable
 {
 public:
+    // CTOR
     Ray(const sf::Vector2f& edgePoint) :
         m_edge_point{edgePoint} {}
 
+    // FUNCTIONS
     void updateOrigin(const sf::Vector2f& new_origin){
         m_vertices[0].position = new_origin;
         updateAngleFromEdge();
     }
-
     void updateEndPoint(float factor){
         m_vertices[1].position = sf::Vector2f{m_vertices[0].position.x + static_cast<float>(cos(m_angle))*factor,
                                               m_vertices[0].position.y + static_cast<float>(sin(m_angle))*factor};
     }
-
     sf::Vector2f origin() const{
         return m_vertices[0].position;
     }
-
     sf::Vector2f endpoint() const{
         return m_vertices[1].position;
     }
-
     void setOffsetAngle(float offset){
         m_offset_angle = offset;
     }
-
     float angle() const{
         return m_angle;
     }
@@ -131,6 +128,9 @@ void createRays(std::vector<Ray>& rays, const sf::RectangleShape& box)
     for(const auto& ep : edgePoints){
         Ray r{ep};
         rays.push_back(r);
+        // Add two more rays (simple copy of original)
+        // And apply negative and positive offset for their angle
+        // It's needed to hit the wall(s) behind any given segment corner and it avoids some artifacts
         rays.push_back(r);
         rays.back().setOffsetAngle(-0.00001f);
         rays.push_back(r);
@@ -150,7 +150,7 @@ void moveRaysOrigin(std::vector<Ray>& rays, const sf::Vector2f& new_origin)
 int main()
 {
     sf::ContextSettings settings{};
-    settings.antialiasingLevel = 0;
+    settings.antialiasingLevel = 8;
 
     // WINDOW
     const unsigned WINDOW_WIDTH{800};
@@ -201,6 +201,10 @@ int main()
         while(window.pollEvent(event))
         {
             if(event.type == sf::Event::KeyPressed){
+                if(event.key.code == sf::Keyboard::Space){
+                    std::cout << "Mouse_pos(" << sf::Mouse::getPosition(window).x << ", "
+                                              << sf::Mouse::getPosition(window).y << ")" << '\n';
+                }
                 if(event.key.code == sf::Keyboard::Escape){
                     window.close();
                 }
@@ -218,22 +222,21 @@ int main()
                                      static_cast<float>(sf::Mouse::getPosition(window).y)};
         moveRaysOrigin(rays, mouse_pos);
 
-        unsigned ray_number{0};
+        unsigned ray_number{0}; // Only used for enpoint visu
         for(auto&& ray : rays){
             std::vector<float> factors{};
             for(const auto& seg : stocked_segments){
                 float factor{getIntersectFactor(ray, seg)};
-                if(factor > 0.f)
+                if(factor >= 0.f)
                     factors.push_back(factor);
             }
-            //assert(!factors.empty() && "factors can't be empty");
             if(!factors.empty()){
                 std::sort(factors.begin(), factors.end());
                 ray.updateEndPoint(factors[0]);
             }
             visu_endpoint[ray_number].setPosition(ray.endpoint().x - red_point.getRadius(),
                                                   ray.endpoint().y - red_point.getRadius());
-            ++ray_number; // Only used for enpoint visu
+            ++ray_number;
         }
 
         // DRAW
