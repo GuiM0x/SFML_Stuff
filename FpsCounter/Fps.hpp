@@ -24,6 +24,11 @@ public:
         }
     }
 
+    void setDisplayRefreshTime(float time_in_seconds)
+    {
+        m_timeToUpdateString = time_in_seconds;
+    }
+
 private:
     float m_timeToUpdateString{0.2f};
     float m_elapsed{0.f};
