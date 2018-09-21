@@ -1,10 +1,14 @@
 #include <SFML/Graphics.hpp>
 #include <iostream>
+#include <vector>
 #include <cmath>
-#include <algorithm>
+#include <ctime>
+#include <random>
 #include <cassert>
+#include <algorithm>
 
 const float PI{3.14159265};
+const sf::Color LIGHT_COLOR{sf::Color{201, 242, 255}};
 
 /////////////////////////////////// RAY
 class Ray : public sf::Drawable
@@ -12,9 +16,25 @@ class Ray : public sf::Drawable
 public:
     // CTOR
     Ray(const sf::Vector2f& edgePoint) :
-        m_edge_point{edgePoint} {}
+        m_edge_point{edgePoint}
+    {
+        m_vertices[0].color = LIGHT_COLOR;
+        m_vertices[1].color = LIGHT_COLOR;
+    }
 
     // FUNCTIONS
+    sf::Vector2f origin() const{
+        return m_vertices[0].position;
+    }
+    sf::Vector2f endpoint() const{
+        return m_vertices[1].position;
+    }
+    float angle() const{
+        return m_angle;
+    }
+    void setOffsetAngle(float offset){
+        m_offset_angle = offset;
+    }
     void updateOrigin(const sf::Vector2f& new_origin){
         m_vertices[0].position = new_origin;
         updateAngleFromEdge();
@@ -22,18 +42,6 @@ public:
     void updateEndPoint(float factor){
         m_vertices[1].position = sf::Vector2f{m_vertices[0].position.x + static_cast<float>(cos(m_angle))*factor,
                                               m_vertices[0].position.y + static_cast<float>(sin(m_angle))*factor};
-    }
-    sf::Vector2f origin() const{
-        return m_vertices[0].position;
-    }
-    sf::Vector2f endpoint() const{
-        return m_vertices[1].position;
-    }
-    void setOffsetAngle(float offset){
-        m_offset_angle = offset;
-    }
-    float angle() const{
-        return m_angle;
     }
 
 private:
@@ -47,36 +55,11 @@ private:
         target.draw(m_vertices, states);
     }
 
+    sf::Vector2f m_edge_point{};
     sf::VertexArray m_vertices{sf::LineStrip, 2};
     float m_angle{}; // radians
-    const sf::Vector2f m_edge_point{};
     float m_offset_angle{0.f};
 };
-
-/////////////////////////////////// GET INTERSECT FACTOR
-float getIntersectFactor(const Ray& ray, const sf::VertexArray& segment)
-{
-    const float r_px{ray.origin().x};
-    const float r_py{ray.origin().y};
-    const float r_dx = cos(ray.angle());
-    const float r_dy = sin(ray.angle());
-
-    const float s_px{segment[0].position.x};
-    const float s_py{segment[0].position.y};
-    const float s_dx{segment[1].position.x - segment[0].position.x};
-    const float s_dy{segment[1].position.y - segment[0].position.y};
-
-    float k1{}; // Factor to find
-    float k2{}; // Factor determined and used to find k1
-
-    k2 = ((r_dx*(s_py-r_py)) + (r_dy*(r_px-s_px)))/((s_dx*r_dy) - (s_dy*r_dx));
-    k1 = (s_px+(s_dx*k2)-r_px)/r_dx;
-
-    if(k1 >= 0 && k2 >= 0 && k2 <= 1)
-        return k1;
-
-    return float{-1.f};
-}
 
 /////////////////////////////////// CREATE BOX
 sf::RectangleShape createBox(float x, float y, float width, float height)
@@ -128,8 +111,7 @@ void createRays(std::vector<Ray>& rays, const sf::RectangleShape& box)
     for(const auto& ep : edgePoints){
         Ray r{ep};
         rays.push_back(r);
-        // Add two more rays (simple copy of original)
-        // And apply negative and positive offset for their angle
+        // Add two more rays and apply negative and positive offset for their angle
         // It's needed to hit the wall(s) behind any given segment corner and it avoids some artifacts
         rays.push_back(r);
         rays.back().setOffsetAngle(-0.00001f);
@@ -146,6 +128,63 @@ void moveRaysOrigin(std::vector<Ray>& rays, const sf::Vector2f& new_origin)
     }
 }
 
+/////////////////////////////////// GET INTERSECT FACTOR
+float getIntersectFactor(const Ray& ray, const sf::VertexArray& segment)
+{
+    const float r_px{ray.origin().x};
+    const float r_py{ray.origin().y};
+    const float r_dx = cos(ray.angle());
+    const float r_dy = sin(ray.angle());
+
+    const float s_px{segment[0].position.x};
+    const float s_py{segment[0].position.y};
+    const float s_dx{segment[1].position.x - segment[0].position.x};
+    const float s_dy{segment[1].position.y - segment[0].position.y};
+
+    float k1{}; // Factor to find
+    float k2{}; // Factor determined and used to find k1
+
+    k2 = ((r_dx*(s_py-r_py)) + (r_dy*(r_px-s_px)))/((s_dx*r_dy) - (s_dy*r_dx));
+    k1 = (s_px+(s_dx*k2)-r_px)/r_dx;
+
+    if(k1 >= 0 && k2 >= 0 && k2 <= 1)
+        return k1;
+
+    return float{-1.f};
+}
+
+/////////////////////////////////// UPDATE RAYS SIZE
+void updateRaysSize(std::vector<Ray>& rays, const std::vector<sf::VertexArray>& segments)
+{
+    for(auto&& ray : rays){
+        std::vector<float> factors{};
+        for(const auto& seg : segments){
+            float factor{getIntersectFactor(ray, seg)};
+            if(factor >= 0.f)
+                factors.push_back(factor);
+        }
+        if(!factors.empty()){
+            std::sort(factors.begin(), factors.end());
+            ray.updateEndPoint(factors[0]);
+        }
+    }
+}
+
+/////////////////////////////////// UPDATE POLY LIGHT
+void updatePolyLight(std::vector<Ray>& rays, sf::VertexArray& polyLight)
+{
+    assert(!rays.empty() && "std::vector<Ray> is empty");
+    std::sort(rays.begin(), rays.end(),
+              [](const Ray& lhs, const Ray& rhs){
+                  return lhs.angle() < rhs.angle();
+              });
+    polyLight[0].position = rays[0].origin();
+    polyLight[polyLight.getVertexCount()-1].position = rays[0].endpoint();
+    for(unsigned i=0; i<rays.size(); ++i){
+        polyLight[i+1].position = rays[i].endpoint();
+    }
+}
+
 /////////////////////////////////// MAIN
 int main()
 {
@@ -157,10 +196,6 @@ int main()
     const unsigned WINDOW_HEIGHT{600};
     const sf::Vector2f SCREEN_CENTER{WINDOW_WIDTH/2.f, WINDOW_HEIGHT/2.f};
     sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "Brouillon_SFML", sf::Style::Default, settings);
-
-    // TIMER
-    sf::Clock clock{};
-    sf::Time dt{};
 
     // BOXES
     sf::RectangleShape box_window = createBox(0.f, 0.f, WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -188,61 +223,38 @@ int main()
     createRays(rays, box_4);
     createRays(rays, box_5);
 
-    // ENDPOINT (ONLY VISUAL)
-    sf::CircleShape red_point{6.f};
-    red_point.setFillColor(sf::Color::Green);
-    std::vector<sf::CircleShape> visu_endpoint(rays.size(), red_point);
+    // TRIANGLE FAN
+    sf::VertexArray polyLight{sf::TriangleFan, rays.size()+2}; // +1 for origin and +1 for last closed point
+    for(unsigned i=0; i<polyLight.getVertexCount(); ++i){
+        polyLight[i].color = LIGHT_COLOR;
+    }
 
     // LOOP
     while(window.isOpen())
     {
         sf::Event event{};
-
         while(window.pollEvent(event))
         {
-            if(event.type == sf::Event::KeyPressed){
-                if(event.key.code == sf::Keyboard::Space){
-                    std::cout << "Mouse_pos(" << sf::Mouse::getPosition(window).x << ", "
-                                              << sf::Mouse::getPosition(window).y << ")" << '\n';
-                }
                 if(event.key.code == sf::Keyboard::Escape){
                     window.close();
                 }
             }
-
             if(event.type == sf::Event::Closed){
                 window.close();
             }
         }
 
         // UPDATE
-        dt = clock.restart();
-
         const sf::Vector2f mouse_pos{static_cast<float>(sf::Mouse::getPosition(window).x),
                                      static_cast<float>(sf::Mouse::getPosition(window).y)};
         moveRaysOrigin(rays, mouse_pos);
-
-        unsigned ray_number{0}; // Only used for enpoint visu
-        for(auto&& ray : rays){
-            std::vector<float> factors{};
-            for(const auto& seg : stocked_segments){
-                float factor{getIntersectFactor(ray, seg)};
-                if(factor >= 0.f)
-                    factors.push_back(factor);
-            }
-            if(!factors.empty()){
-                std::sort(factors.begin(), factors.end());
-                ray.updateEndPoint(factors[0]);
-            }
-            visu_endpoint[ray_number].setPosition(ray.endpoint().x - red_point.getRadius(),
-                                                  ray.endpoint().y - red_point.getRadius());
-            ++ray_number;
-        }
+        updateRaysSize(rays, stocked_segments);
+        updatePolyLight(rays, polyLight);
 
         // DRAW
         window.clear();
         for(const auto& ray : rays) window.draw(ray);
-        for(const auto& red_p : visu_endpoint) window.draw(red_p);
+        window.draw(polyLight);
         window.draw(box_window);
         window.draw(box_1);
         window.draw(box_2);
