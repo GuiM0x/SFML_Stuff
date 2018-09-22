@@ -51,7 +51,7 @@ private:
         m_angle = atan2(dy, dx) + m_offset_angle;
     }
 
-    void draw(sf::RenderTarget& target, sf::RenderStates states) const{
+    void draw(sf::RenderTarget& target, sf::RenderStates states) const final override{
         target.draw(m_vertices, states);
     }
 
