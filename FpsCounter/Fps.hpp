@@ -8,14 +8,13 @@
 class Fps : public sf::Text
 {
 public:
-    Fps(const std::string& string,
-        const sf::Font& font,
+    Fps(const sf::Font& font,
         unsigned characterSize=16)
     :
-        sf::Text{string, font, characterSize}
+        sf::Text{"0", font, characterSize}
     {}
 
-    void computeFps(const sf::Time& dt){
+    void update(const sf::Time& dt){
         m_elapsed += dt.asSeconds();
         if(m_elapsed>m_timeToUpdateString){
             m_elapsed = 0.f;
@@ -24,13 +23,12 @@ public:
         }
     }
 
-    void setDisplayRefreshTime(float time_in_seconds)
-    {
+    void setTextRefreshTime(float time_in_seconds){
         m_timeToUpdateString = time_in_seconds;
     }
 
 private:
-    float m_timeToUpdateString{0.2f};
+    float m_timeToUpdateString{0.1f};
     float m_elapsed{0.f};
 };
 
